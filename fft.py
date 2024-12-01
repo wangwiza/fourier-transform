@@ -47,6 +47,19 @@ def ifft(X):
     return np.concatenate([x_even + factor[:N // 2] * x_odd,
                            x_even + factor[N // 2:] * x_odd]) / 2
 
+def dft2(x_matrix):
+    """
+    Perform a 2D DFT using the provided 1D DFT function.
+    This function assumes that x_matrix is a 2D numpy array.
+    """
+    # Apply 1D DFT along the rows
+    row_dft = np.array([naive_dft(row) for row in x_matrix])
+    
+    # Apply 1D DFT along the columns
+    col_dft = np.array([naive_dft(col) for col in row_dft.T]).T
+    
+    return col_dft
+
 def fft2(x_matrix):
     """
     Perform a 2D FFT using the provided 1D FFT function.
@@ -96,37 +109,93 @@ def denoise_image(image, keep_fraction=0.1):
     mask[:, int(c*keep_fraction):int(c*(1-keep_fraction))] = False
     # Apply the mask to zero out high frequencies
     im_fft[~mask] = 0
+    num_non_zeros = np.count_nonzero(mask)
+    print(f"Number of non-zero values: {num_non_zeros}")
+    print(f"Fraction of non-zero values: {num_non_zeros / im_fft.size:.4f}")
     # Perform the inverse FFT
     im_new = ifft2(im_fft).real
     # Count the number of zeroed out values
-    num_zeroed_out = np.sum(~mask)
-    return im_new, num_zeroed_out
+    return im_new
+
+def plot_denoised_image(image, denoised_image):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.title("Original Image")
+    plt.imshow(image, cmap='gray')
+    plt.subplot(1, 2, 2)
+    plt.title("Denoised Image")
+    plt.imshow(denoised_image, cmap='gray')
+    plt.show()
 
 # Compress Image
+def generate_compressed_images(image):
+    im_fft = fft2(image)
+    # Get the magnitude of the FFT
+    im_fft_magnitude = np.abs(im_fft)
 
+    compressed_images = []
+    percentiles = [0, 50, 75, 90, 95, 99.9]
+    for percentile in percentiles:
+        # Get the percentile value
+        percentile_value = np.percentile(im_fft_magnitude, percentile)
+        # Create a mask to identify which values are zeroed out
+        mask = im_fft_magnitude > percentile_value
+        # Apply the mask to zero out high frequencies
+        compressed_image = im_fft * mask
+        # Perform the inverse FFT
+        im_new = ifft2(compressed_image).real
+        # Count the number of non-zero elements in the Fourier transform
+        num_non_zeros = np.count_nonzero(mask)
+        print(f"Percentile {percentile}: Number of non-zero elements in Fourier transform = {num_non_zeros}")
+        compressed_images.append((percentile, im_new))
+    return compressed_images
 
 # Plot Compressed Images
-
+def plot_compressed_images(compressed_images):
+    plt.figure(figsize=(15, 10))
+    for i, x in enumerate(compressed_images):
+        plt.subplot(2, 3, i+1)
+        plt.title(f"{x[0]}th Percentile")
+        plt.imshow(x[1], cmap='gray')
+    plt.show()
 
 # Plot Runtime
 def plot_runtime():
     sizes = [2**i for i in range(5, 11)]
-    dft_times = []
-    fft_times = []
+    dft2_means = []
+    fft2_means = []
+    dft2_stds = []
+    fft2_stds = []
+    
     for size in sizes:
-        x = np.random.random(size)
-        start_time = time.time()
-        naive_dft(x)
-        dft_times.append(time.time() - start_time)
-        start_time = time.time()
-        fft(x)
-        fft_times.append(time.time() - start_time)
-    plt.plot(sizes, dft_times, label='DFT')
-    plt.plot(sizes, fft_times, label='FFT')
+        print(f"Running experiment for size {size}x{size}")
+        dft2_time_samples = []
+        fft2_time_samples = []
+        for _ in range(10):  # Run the experiment 10 times
+            x = np.random.random((size, size))
+            start_time = time.time()
+            dft2(x)
+            dft2_time_samples.append(time.time() - start_time)
+            
+            start_time = time.time()
+            fft2(x)
+            fft2_time_samples.append(time.time() - start_time)
+        
+        dft2_means.append(np.mean(dft2_time_samples))
+        fft2_means.append(np.mean(fft2_time_samples))
+        dft2_stds.append(np.std(dft2_time_samples))
+        fft2_stds.append(np.std(fft2_time_samples))
+    
+    plt.errorbar(sizes, dft2_means, yerr=[2*std for std in dft2_stds], label='2D DFT', capsize=5)
+    plt.errorbar(sizes, fft2_means, yerr=[2*std for std in fft2_stds], label='2D FFT', capsize=5)
     plt.xlabel('Input size')
     plt.ylabel('Time (s)')
     plt.legend()
+    plt.title('Runtime Complexity of 2D DFT and 2D FFT')
     plt.show()
+
+    for size, dft2_mean, fft2_mean, dft2_std, fft2_std in zip(sizes, dft2_means, fft2_means, dft2_stds, fft2_stds):
+        print(f"Size: {size}, 2D DFT Mean: {dft2_mean:.6f}s, 2D DFT Std: {dft2_std:.6f}s, 2D FFT Mean: {fft2_mean:.6f}s, 2D FFT Std: {fft2_std:.6f}s")
 
 # Pad image to the next power of 2
 def pad_image(image):
@@ -152,28 +221,21 @@ def main():
     original_shape = image.shape
     image = pad_image(image)
 
-
     if args.mode == 1:
         fft_image = fft2(image)
         fft_image = cv2.resize(np.abs(fft_image), (original_shape[1], original_shape[0]), interpolation=cv2.INTER_LINEAR)
         image = image[:original_shape[0], :original_shape[1]]
         plot_fft(image, fft_image)
     elif args.mode == 2:
-        denoised_image, num_zeroed_out = denoise_image(image)
-        plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
-        plt.title("Original Image")
-        plt.imshow(image[:original_shape[0], :original_shape[1]], cmap='gray')
-        plt.subplot(1, 2, 2)
-        plt.title("Denoised Image")
-        plt.imshow(denoised_image[:original_shape[0], :original_shape[1]], cmap='gray')
-        total_elements = image.size
-        print(f"Number of zeroed out values: {num_zeroed_out}")
-        print(f"Fraction of zeroed out values: {num_zeroed_out / total_elements:.4f}")
-        plt.show()
+        denoised_image = denoise_image(image)
+        plot_denoised_image(image[:original_shape[0], :original_shape[1]], denoised_image[:original_shape[0], :original_shape[1]])
     elif args.mode == 3:
-        pass
-        
+        compressed_images = generate_compressed_images(image)
+        compressed_images = [(x[0], x[1][:original_shape[0], :original_shape[1]]) for x in compressed_images]
+        for percentile, img in compressed_images:
+            num_non_zeros = np.count_nonzero(img)
+            print(f"Percentile {percentile}: Number of non-zero elements = {num_non_zeros}")
+        plot_compressed_images(compressed_images)
     elif args.mode == 4:
         plot_runtime()
 
