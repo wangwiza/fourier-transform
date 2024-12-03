@@ -128,13 +128,13 @@ def plot_denoised_image(image, denoised_image):
     plt.show()
 
 # Compress Image
-def generate_compressed_images(image):
+def generate_compressed_images(image, percentiles=[0, 50, 75, 90, 95, 99.9]):
     im_fft = fft2(image)
     # Get the magnitude of the FFT
     im_fft_magnitude = np.abs(im_fft)
 
     compressed_images = []
-    percentiles = [0, 50, 75, 90, 95, 99.9]
+    non_zeros_count = []
     for percentile in percentiles:
         # Get the percentile value
         percentile_value = np.percentile(im_fft_magnitude, percentile)
@@ -146,22 +146,23 @@ def generate_compressed_images(image):
         im_new = ifft2(compressed_image).real
         # Count the number of non-zero elements in the Fourier transform
         num_non_zeros = np.count_nonzero(mask)
+        non_zeros_count.append(num_non_zeros)
         print(f"Percentile {percentile}: Number of non-zero elements in Fourier transform = {num_non_zeros}")
-        compressed_images.append((percentile, im_new))
-    return compressed_images
+        compressed_images.append(im_new)
+    return compressed_images, non_zeros_count
 
 # Plot Compressed Images
-def plot_compressed_images(compressed_images):
+def plot_compressed_images(compressed_images, percentiles=[0, 50, 75, 90, 95, 99.9], non_zeros_count=[]):
     plt.figure(figsize=(15, 10))
-    for i, x in enumerate(compressed_images):
+    for i, (image, non_zeros) in enumerate(zip(compressed_images, non_zeros_count)):
         plt.subplot(2, 3, i+1)
-        plt.title(f"{x[0]}th Percentile")
-        plt.imshow(x[1], cmap='gray')
+        plt.title(f"{percentiles[i]}th Percentile\nNon-zeros: {non_zeros}")
+        plt.imshow(image, cmap='gray')
     plt.show()
 
 # Plot Runtime
 def plot_runtime():
-    sizes = [2**i for i in range(5, 11)]
+    sizes = [2**i for i in range(2, 8)]
     dft2_means = []
     fft2_means = []
     dft2_stds = []
@@ -192,10 +193,10 @@ def plot_runtime():
     plt.ylabel('Time (s)')
     plt.legend()
     plt.title('Runtime Complexity of 2D DFT and 2D FFT')
-    plt.show()
-
     for size, dft2_mean, fft2_mean, dft2_std, fft2_std in zip(sizes, dft2_means, fft2_means, dft2_stds, fft2_stds):
         print(f"Size: {size}, 2D DFT Mean: {dft2_mean:.6f}s, 2D DFT Std: {dft2_std:.6f}s, 2D FFT Mean: {fft2_mean:.6f}s, 2D FFT Std: {fft2_std:.6f}s")
+    plt.show()
+
 
 # Pad image to the next power of 2
 def pad_image(image):
@@ -230,12 +231,9 @@ def main():
         denoised_image = denoise_image(image)
         plot_denoised_image(image[:original_shape[0], :original_shape[1]], denoised_image[:original_shape[0], :original_shape[1]])
     elif args.mode == 3:
-        compressed_images = generate_compressed_images(image)
-        compressed_images = [(x[0], x[1][:original_shape[0], :original_shape[1]]) for x in compressed_images]
-        for percentile, img in compressed_images:
-            num_non_zeros = np.count_nonzero(img)
-            print(f"Percentile {percentile}: Number of non-zero elements = {num_non_zeros}")
-        plot_compressed_images(compressed_images)
+        compressed_images, non_zeros_count = generate_compressed_images(image)
+        compressed_images = [(x[:original_shape[0], :original_shape[1]]) for x in compressed_images]
+        plot_compressed_images(compressed_images, non_zeros_count=non_zeros_count)
     elif args.mode == 4:
         plot_runtime()
 
