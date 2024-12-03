@@ -97,7 +97,7 @@ def plot_fft(image, fft_image):
     plt.colorbar()
     plt.show()
 
-# Denoise Image
+# Denoise Image (Keep Low Frequencies)
 def denoise_image(image, keep_fraction=0.1):
     im_fft = fft2(image)
     r, c = im_fft.shape
@@ -115,6 +115,23 @@ def denoise_image(image, keep_fraction=0.1):
     # Perform the inverse FFT
     im_new = ifft2(im_fft).real
     # Count the number of zeroed out values
+    return im_new
+
+# Denoise Image (Thresholding)
+def denoise_image_threshold(image, threshold=0.5):
+    # Perform the FFT
+    im_fft = fft2(image)
+    # Get the magnitude of the FFT
+    im_fft_magnitude = np.abs(im_fft)
+    # Determine the threshold value
+    max_magnitude = np.max(im_fft_magnitude)
+    threshold_value = threshold * max_magnitude
+    # Create a mask to keep frequencies with magnitude lower than the threshold
+    mask = im_fft_magnitude < threshold_value
+    # Apply the mask
+    im_fft_denoised = im_fft * mask
+    # Perform the inverse FFT
+    im_new = ifft2(im_fft_denoised).real
     return im_new
 
 def plot_denoised_image(image, denoised_image):
