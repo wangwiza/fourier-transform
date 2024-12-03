@@ -1,3 +1,5 @@
+# Author: William Wang 261113954, Kevin Li 261120382
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
