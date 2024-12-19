@@ -23,7 +23,7 @@ This project demonstrates the application of Fourier Transform algorithms, inclu
 Install the dependencies:
 
 ```bash
-pip install numpy matplotlib opencv-python
+pip install -r requirements.txt
 ```
 
 ## Usage
